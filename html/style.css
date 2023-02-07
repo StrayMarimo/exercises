@@ -1,0 +1,33 @@
+body{
+    font-family: 'Oswald';
+    font-weight: 200;
+    background-color: lightslategray;
+    align-content: center;
+}
+input[type="submit"] {
+    border: 0px;
+    color: white;
+    padding: 5px 10px 5px 10px;
+    border-radius: 5px;
+}
+.full{
+    width: 100%;
+}
+input[type="date"]{
+    opacity: 0.5;
+}
+
+#submit{
+    background-color: green;
+}
+#reset{
+    background-color: red;
+}
+form{
+    background-color: white;
+    border-radius: 10px;
+    margin: 40px;
+    padding: 40px;
+    box-sizing: content-box;
+    width: min-content;
+}
