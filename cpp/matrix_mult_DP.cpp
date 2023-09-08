@@ -1,256 +1,442 @@
 /*
  <----------------------------------------------------------------------->
- This program accepts performs matrix multiplication of 2 nxn matrices
- This uses dynamic programming approach that makes use of standard DAC
+ This program accepts a sequence of matrices with different dimensions,
+ implements matrix chain multiplication by dynamic programming approach
+ to determine
  algorithm in multiplying matrices
 <------------------------------------------------------------------------>
  */
 
 #include <iostream>
 #include <vector>
+#include <cstdlib>
+#include <ctime>
+#include <climits>
+#include <string>
 #include <iomanip>
-#include <map>
+
 using namespace std;
 
 // aliases
-#define mat vector<vector<int>>
-#define input pair<pair<mat, mat>, int>
+#define ll long long
+#define Matrix vector<vector<ll>>
+#define Address pair<size_t, size_t>
+#define AuxTables pair<Matrix, Matrix>
+#define Arr vector<size_t>
 
-// map for memoization
-map<input, mat> memo;
-
-// stores the submatrix and its current address on original matrix
-struct Matrix{
-    mat matrix;
-    int row = 0;
-    int col = 0;
-};
-
+// global variables
+size_t CHAIN_SIZE = 6;
+vector<Matrix> matrix_chain(CHAIN_SIZE);
+string parens = "";
 
 // <------------------ function prototypes ------------------------------>
-void inputMatrix(mat &A, int n, bool isEven);
-void displayMatrix(mat C, bool isEven);
-void sumMatrix(mat A, mat B, mat &C, int row, int col);
-mat SMMR(Matrix A, Matrix B, int n);
-mat truncateKey(Matrix matrix, int n);
+bool promptUser();
+Arr getDimensions();
+Matrix setMatrixValues(Address, bool);
+void displayMatrix(Matrix);
+AuxTables matrixChainOrder(Arr);
+Matrix matrixChainMultiply(Arr);
+Matrix matrixMultiply(Matrix, Matrix);
+void optimalParens(Matrix, Address);
+int toInt(char num);
+void displayDivider();
 // <--------------------------------------------------------------------->
 
-
-
 // <------------------------- Driver ------------------------------------>
-int main(){
-    int n = 0;
-    bool isEven = 1;
-    Matrix A, B, C;
-    
-    do {
-        // input dimension of matrices
-        cout << "Enter size of square matrix: ";
+int main()
+{
+    Arr dimensions; // hold the dimensions of the matrix chain
+
+    // used to generate different random numbers per run
+    srand(time(NULL));
+
+    // Prompt the user to enter custom dimensions or use default values
+    bool custom_input = promptUser();
+
+    // If the user entered custom dimensions, get the dimensions
+    // and resize the matrix_chain vector to hold the matrices
+    if (custom_input)
+    {
+        dimensions = getDimensions();
+        CHAIN_SIZE = dimensions.size() - 1;
+        matrix_chain.resize(CHAIN_SIZE);
+    }
+    else
+    {
+        // If the user didn't enter custom dimensions, use default values
+        dimensions = {2, 3, 4, 3, 2, 5, 3};
+    }
+
+    // Loop through the matrix chain and set values for each matrix
+    for (size_t i = 0; i < CHAIN_SIZE; i++)
+    {
+        // If the user entered custom dimensions, prompt the user to enter
+        // values for the current matrix
+        if (custom_input)
+            cout << "Enter values for Matrix " << i + 1 << "("
+                 << dimensions[i] << "x" << dimensions[i + 1] << ") :" << endl;
+
+        // Create an object to hold the dimensions of the current matrix
+        Address dimension(dimensions[i], dimensions[i + 1]);
+
+        // Set values for current matrix and store it to the matrix chain
+        matrix_chain[i] = setMatrixValues(dimension, custom_input);
+
+        // Print the current matrix
+        cout << "Matrix " << i + 1 << ": " << endl;
+        displayMatrix(matrix_chain[i]);
+        displayDivider();
+    }
+    // Calculate the optimal order to multiply the matrices
+    // and print the result
+    AuxTables mc = matrixChainOrder(dimensions);
+    ll optimal = mc.first[1][CHAIN_SIZE];
+    cout << "The minimum number of scalar multiplications needed to ";
+    cout << "multiply the chain of matrices is: " << optimal << endl;
+    // Get the parenthisiaztion of the optimal order of multiplying the
+    // matrix chain as a string and print it
+    optimalParens(mc.second, make_pair(1, CHAIN_SIZE));
+    cout << "The optimal parenthesization is: " << parens << endl;
+
+    // multiply the matrices in order
+    Matrix C = matrixChainMultiply(dimensions);
+    displayDivider();
+
+    // print the resultant matrix
+    cout << "The product of the matrix chain is: " << endl;
+    displayMatrix(C);
+}
+// <--------------------- Custom Functions ------------------------------>
+/**
+ * Calculates the optimal order to multiply the matrices in the
+ * given matrix chain
+ * @param dimensions: An Arr object representing the dimensions
+ *         of the matrix chain
+ * @return A pair of matrices representing the minimum number of scalar
+ *         multiplications needed to multiply the chain of matrices and
+ *         the optimal parenthesization of the matrix chain
+ */
+AuxTables matrixChainOrder(Arr dimensions)
+{
+    // Create two matrices initialized to 0
+    Matrix m(CHAIN_SIZE + 1, vector<ll>(CHAIN_SIZE + 1, 0));
+    Matrix s(CHAIN_SIZE + 1, vector<ll>(CHAIN_SIZE + 1, 0));
+
+    // Loop through the matrix chain and calculate the minimum number
+    // of scalar multiplications needed to multiply each subchain
+    for (size_t chain_len = 1; chain_len < CHAIN_SIZE; chain_len++)
+    {
+        for (size_t i = 1; i < CHAIN_SIZE - chain_len + 1; i++)
+        {
+            int j = i + chain_len;
+            m[i][j] = INT_MAX;
+            for (int k = i; k <= j - 1; k++)
+            {
+                ll q = m[i][k] + m[k + 1][j] + dimensions[i - 1] * 
+                    dimensions[k] * dimensions[j];
+                if (q < m[i][j])
+                {
+                    m[i][j] = q;
+                    s[i][j] = k;
+                }
+            }
+        }
+    }
+
+    // create object to hold the result and return it
+    AuxTables mc(m, s);
+    return mc;
+}
+
+/**
+ * Determines the optimal parenthesization of the matrix chain and
+ * stores it to a static string
+ * @param s: A Matrix representing the optimal splitting points
+ *      of the matrix chain
+ * @param ad: A pair of size_t representing the address of the cuurent
+ *      subchain to parenthesize
+ * @return A string representing the optimal parenthesization of the
+ *      matrix chain
+ */
+void optimalParens(Matrix s, Address ad)
+{
+
+    // If the subchain is a single matrix,
+    // add it to the parenthesization string
+    if (ad.first == ad.second)
+        parens += "A" + to_string(ad.first);
+    else
+    {
+        // If the subchain is not a single matrix,
+        // recursively parenthesize its two subchains
+        parens += "(";
+        optimalParens(s, make_pair(ad.first, s[ad.first][ad.second]));
+        optimalParens(s, make_pair(s[ad.first][ad.second] + 1, ad.second));
+        parens += ")";
+    }
+}
+
+/**
+ * Multiplies the matrix chain in order
+ * @param dimensions: An array of size_t representing the dimensions of
+ *         the matrix chain
+ * @return Matrix: the resultant matrix which is the product of all
+ *          the matrices in the chain
+ */
+Matrix matrixChainMultiply(Arr dimensions)
+{
+    // holds the products of two matrices in the chain
+    vector<Matrix> products(CHAIN_SIZE - 1);
+    size_t bCtr = 0; // holds address in products to add a product
+
+    // This function will iterate until there are no more matrix left
+    // to multiply in the parenthesization
+    while (parens.length() > 0)
+    {
+        // loop through the parenthisization string
+        for (int i = 0; i < parens.length(); i++)
+        {
+            /* if the current character is a digit and the next character
+            is an alpha, it means that it is safe to multiply
+            the adjacent matrices.
+
+            For example, in the parenthisization, ((A1A2)(((A3A4)A5)A6))
+            this function first multiplies A1 and A2, then push the
+            result to products. Then proceed to traverse the string and
+            find adjacent matrices to multiply
+            */
+            if (isdigit(parens[i]) && isalpha(parens[i + 1]))
+            {
+
+                /* If the cuurent matrix has an A prefix, then get the
+                matrix from the chain_order, otherwise, get the matrix
+                from the products vector. The number specifies the position
+                of the matrix in the vector
+                */
+                Matrix A = (parens[i - 1] == 'A')
+                               ? matrix_chain[toInt(parens[i])]
+                               : products[toInt(parens[i])];
+                Matrix B = (parens[i + 1] == 'A')
+                               ? matrix_chain[toInt(parens[i + 2])]
+                               : products[toInt(parens[i + 2])];
+
+                cout << "Current Parenthesization: " << parens << endl;
+
+                // Print the matrices to be multiplied and multiply it
+                cout << "Multiplying " << parens[i - 1] << parens[i]
+                     << " and " << parens[i + 1]
+                     << parens[i + 2] << ":" << endl;
+
+                cout << "Matrix " << parens[i - 1]
+                     << parens[i] << ":" << endl;
+                displayMatrix(A);
+                cout << "Matrix " << parens[i + 1]
+                     << parens[i + 2] << ":" << endl;
+                displayMatrix(B);
+                cout << endl;
+
+                Matrix product = matrixMultiply(A, B);
+                products[bCtr] = product;
+                bCtr++;
+                cout << "The product C" << bCtr << " is: " << endl;
+                displayMatrix(product);
+
+                displayDivider();
+
+                // if length is 6, it means it is the last set
+                // to be multiplied, so clear the parens variable to
+                // break the loop
+                if (parens.length() == 6)
+                    parens = "";
+                // otherwise replace the string with the address of
+                // the product in products vector
+                // For example, in the parenthisization,
+                // ((A1A2)(((A3A4)A5)A6)), after mulriplying A1 and A2
+                // the parens string will be replaced with
+                // (C1(((A3A4)A5)A6))
+                else
+                    parens.replace(i - 2, 6, "C" + to_string(bCtr));
+            }
+        }
+    }
+
+    // the product of the whole chain will be stored
+    // in the last element of products variable
+    return products[products.size() - 1];
+}
+
+/**
+ * Multiplies two matrices
+ * @param A: A Matrix representing the first matrix
+ * @param B: A Matrix representing the second matrix
+ * @return A Matrix representing the product of the two matrices
+ */
+Matrix matrixMultiply(Matrix A, Matrix B)
+{
+
+    // holds the product of the two matrices
+    Matrix C(A.size(), vector<ll>(B[0].size(), 0));
+
+    // compute the product using the naive method
+    for (int i = 0; i < A.size(); i++)
+        for (int j = 0; j < B[0].size(); j++)
+            for (int k = 0; k < B.size(); k++)
+                C[i][j] += A[i][k] * B[k][j];
+
+    // return the resultant matrix
+    return C;
+}
+
+/**
+ * Prompts the user to choose between inputting a custom matrix chain or
+ * generating a randomized input.If the user chooses a randomized input,
+ * the dimensions of the matrices are predetermined.
+ * @return true if the user chooses custom input,
+ *          false if they choose ndomized input.
+ */
+bool promptUser()
+{
+    char answer = 'x';
+
+    displayDivider();
+    cout << "This program multiplies a sequence of matrices." << endl;
+    displayDivider();
+
+    // Loop until user enters a valid input
+    do
+    {
+        cout << "Do you want to input a chain of matrices or ";
+        cout << "generate a randomized input?" << endl;
+        cout << "The randomized input has 6 matrices with ";
+        cout << "the dimensions: " << endl;
+        cout << "A1: (2 x 3)" << endl;
+        cout << "A2: (3 x 4)" << endl;
+        cout << "A3: (4 x 3)" << endl;
+        cout << "A4: (3 x 2)" << endl;
+        cout << "A5: (2 x 5)" << endl;
+        cout << "A6: (5 x 3)" << endl;
+        cout << "Enter y for custom input, n for random input with ";
+        cout << "predetermined dimensions: ";
+
+        cin >> answer;
+
+        // Check user input
+        if (answer == 'y')
+            return true;
+        else if (answer == 'n')
+            return false;
+        else
+            cout << "Invalid input. Try again " << endl;
+        displayDivider();
+
+    } while (true);
+}
+/**
+ * Prompts user to input the number of matrices and their dimensions
+ *
+ * @return Arr: An array of integers representing the dimensions of
+ *      matrices to be multiplied
+ */
+Arr getDimensions()
+{
+
+    // The dimensions will be stored in a vector of size chain_size + 1
+    // The dimensions of Matrix i is represented by
+    // dimensions[i] and dimensions[i+1]
+    size_t n = 0;
+
+    do
+    {
+        cout << "Enter the number of matrices you want to multiply: ";
         cin >> n;
-        if (n < 1) cout << "Invalid input. Try Again" << endl;
-    } while (n < 1);
-    
+        if (n < 2 || n > 9)
+            cout << "Invalid Input. Size should be greater than 1 ";
+        cout << "and less than 10 " << endl;
+        displayDivider();
+    } while (n < 2 || n > 9);
 
-    /*
-     * if n is not divisible by 2, create an n+1 by n+1 matrix.
-     * Since algo only works if n is divisible by 2,
-     * adding 1 to n will make it divisible by 2.
-     * then fill the extra cells with zeroes later on.
-     */
-    if (n % 2 != 0 && n > 2) {
-        n++;
-        isEven = 0;
-    }
-    
-    // prompt message
-    cout << "Input should be space separated or newline separated, example input for 2by2 matrix: " << endl;
-    cout << "1 2 \n";
-    cout << "3 4 \n";
-    cout << "The matrix above can also be inputted as follows" << endl;
-    cout << "1 2 3 4\n";
-    
-    // input matrices to be multiplied
-    cout << "Enter Matrix A: \n";
-    inputMatrix(A.matrix, n, isEven);
-    cout << "Enter Matrix B: \n";
-    inputMatrix(B.matrix, n, isEven);
+    Arr dimensions(n + 1);
 
-    // call the recursive function and store resultant matrix to C
-    C.matrix = SMMR(A, B, n);
-    
-    // display resultant matrix
-    // (without filled zeroes if n is not divisible by 2)
-    displayMatrix(C.matrix, isEven);
-    
-    return 0;
-}
-
-// <------------------ function definitions ------------------------------>
-
-
-/*
- *  function that partitions nxn matrix into n/2 by n/2 matrix if n != 1
- *  if n = 1, then perform a scalar multiplication
- *  overall, this function is called 8^⌈n/2⌉ times
- *  @params:
- *   A - 2d vector input matrix
- *   B - 2d vector input matrix
- *   rowA and colA - integers indicating indices of matrix A
- *           to be multiplied when base case is reached
- *   rowB and colB - integers indicating indices of matrix B
- *           to be multiplied when base case is reached
- */
-
-mat SMMR(Matrix A, Matrix B, int n) {
-    
-    /*
-     * the key for the memo map consists of:
-     *   - values of the submatrix A,
-     *   - values of the submatrix B
-     *   - current size of the submatrix
-     * since this algo does not create new submatrices and
-     * only manipulates the indices, the truncateKey
-     * function is needed to determine the
-     * exact values of submatrices A and B.
-     */
-    input key = make_pair(make_pair(truncateKey(A, n), truncateKey(B, n)), n);
-    // if the submatrix was solved previously,
-    // then get the stored value for the result of multiplying these matrices
-    if (memo.find(key) != memo.end()) return memo[key];
-    
-    // declare resultant matrix
-    mat c(n,vector<int> (n, 0));
-    Matrix C;
-    C.matrix = c;
-
-    if (n == 1) {
-        C.matrix[0][0] = A.matrix[A.row][A.col] * B.matrix[B.row][B.col];
-        return C.matrix;
-    }
-     // partition A, B, and C
-    int newSize = n / 2;
-    for (int i = 0; i < 4; i++) {
-        Matrix A1 = A, A2 = A, B1 = B, B2 = B;
-        switch (i) {
-            case 0: // C[0][0] = A[0][0] * B[0][0] + A[0][1] * B[1][0]
-                A2.col += newSize;
-                B2.row += newSize;
-                break;
-            case 1: // C[0][1] = A[0][0] * B[0][1] + A[0][1] * B[1][1]
-                B1.col += newSize;
-                A2.col += newSize;
-                B2.col += newSize;
-                B2.row += newSize;
-                C.col = newSize;
-                break;
-            case 2: // C[1][0] = A[1][0] * B[0][0] + A[1][1] * B[1][0]
-                A1.row += newSize;
-                A2.row += newSize;
-                A2.col += newSize;
-                B2.row += newSize;
-                C.row = newSize;
-                C.col = 0;
-                break;
-            case 3: // C[1][1] = (A[1][0] * B[0][1]) + A[1][1] * B[1][1]
-                A1.row += newSize;
-                B1.col += newSize;
-                A2.row += newSize;
-                A2.col += newSize;
-                B2.row += newSize;
-                B2.col += newSize;
-                C.row = newSize;
-                C.col = newSize;
-                break;
+    for (size_t i = 0; i < n; i++)
+    {
+        size_t row, col;
+        if (i == 0)
+        {
+            cout << "Enter the dimensions for first matrix: ";
+            cin >> dimensions[0] >> dimensions[1];
         }
-        // adding the products
-        sumMatrix(SMMR(A1, B1, newSize), SMMR(A2, B2, newSize), C.matrix, C.row, C.col);
-            
+        else
+        {
+            cout << "Enter the column for Matrix " << i << ": ";
+            cin >> dimensions[i + 1];
+        }
+
+        cout << "Matrix " << i + 1 << " is a " << dimensions[i] << " by ";
+        cout << dimensions[i + 1] << " matrix." << endl;
+        displayDivider();
     }
-    // store the resultant matrix to this subproblem that may be used later on
-    memo[key] = C.matrix;
-   
-    return memo[key];
+
+    return dimensions;
 }
-
-/*
- * function to add the products of submatrices
- * overall, this function is called 4^⌈n/2⌉ times
- * @params:
- *   A - 2d vector input matrix
- *   B - 2d vector input matrix
- *   C - 2d vector reaultant matrix passed by reference
- *   rowC and colC - indices to indicate where
- *      to store the sum in resultant matrix
+/**
+ * Set the values of a matrix.
+ * If the user opted for custom input, then ask for values
+ * Otherwise, generate a random number between -50 and 50 inclusive
+ * @param dimension: a pair of size_t representing the dimension of
+ *          the matrix to be populated
+ * @param custom_input: a boolean that represents if the user wants to
+ *          customize input
+ * @return Matrix: a 2d vector with populated values
  */
-
-void sumMatrix(mat A, mat B, mat &C, int row, int col) {
-    int n = A[0].size();
-    // this nested loop iterates ⌈n/2⌉ times
-    for (int i = 0; i < n; i++) {
-        for (int j = 0; j < n; j++) {
-            C[i + row][j + col] = A[i][j] + B[i][j];
+Matrix setMatrixValues(Address dimension, bool custom_input)
+{
+    // holds the matrix to be populated
+    Matrix matrix(dimension.first, vector<ll>(dimension.second, 0));
+    for (size_t i = 0; i < dimension.first; i++)
+    {
+        for (size_t j = 0; j < dimension.second; j++)
+        {
+            if (custom_input)
+                cin >> matrix[i][j];
+            else // generate random number between -50 and 50 inclusive
+                matrix[i][j] = -50 + rand() % (101);
         }
     }
-
+    return matrix;
 }
 
-
-/*
- * function to input a matrix
- * @params:
- *   A - 2d vector passed by reference
- *   isPower2 - boolean that indicates if n is divisible by 2
+/**
+ * Displays the matrix
+ *
+ * @param matrix: Matrix to be displayed
  */
-
-void inputMatrix(mat &A, int n, bool isEven) {
-   
-    for (int i = 0; i < n; i++) {
-        vector<int> temp;
-        for (int j = 0; j < n; j++) {
-            // if isPower2 is false, fill the last column and row with zeroes
-            int num = 0;
-            if ((!isEven && j < 3 && i < 3) || isEven)
-                cin >> num;
-            temp.push_back(num);
-        }
-        A.push_back(temp);
-    }
-}
-
-
-/*
- * function to display a matrix
- * @params:
- *   A - 2d vector passed by reference
- *   isPower2 - boolean that indicates if n is divisible by 2
- */
-
-void displayMatrix(mat C, bool isEven) {
-    int n = isEven? C.size() : C.size() - 1;
-    for (int i = 0; i < n; i++) {
-        for (int j = 0; j < n; j++) {
-            cout << left << setw(10) <<  C[i][j] << " ";
+void displayMatrix(Matrix matrix)
+{
+    for (size_t i = 0; i < matrix.size(); i++)
+    {
+        for (size_t j = 0; j < matrix[0].size(); j++)
+        {
+            cout << right << setw(15) << matrix[i][j] << "\t";
         }
         cout << endl;
     }
 }
-
-/*
- * function to get values of a submatrix from the original matrix
- * @params:
- *   matrix - a struct which is the original matrix
- *   n - size of submatrix
- * @return:
- *  a 2d vector with suze nbyn
+/**
+ * Converts a single digit character to an integer value.
+ *
+ * @param num a single digit character to be converted to an integer
+ * @return the integer value corresponding to the input character,
+ *          starting from 0
  */
-mat truncateKey(Matrix matrix, int n) {
-    mat res;
-    for (int i = 0; i < n; i++) {
-         vector<int> temp;
-        for (int j = 0; j < n; j++) {
-           temp.push_back(matrix.matrix[matrix.row + i][matrix.col + j]);
-        }
-        res.push_back(temp);
-    }
-    return res;
+int toInt(char num) { return stoi(to_string(num)) - 49; }
+
+/**
+ * displays a divider consisting of 100 dashes to visually separate
+ * different parts of the program output.
+ */
+void displayDivider()
+{
+    for (size_t i = 0; i < 100; i++)
+        cout << "-";
+    cout << endl;
 }
